@@ -6,9 +6,12 @@ import math
 import os
 from collections import defaultdict
 
+import numpy as np
+
+import spacy
 import sklearn.linear_model
 import sklearn.preprocessing
-import spacy
+import pandas as pd
 
 import utils
 
@@ -84,7 +87,7 @@ def train_tag_mle(data):
     return lambda token: _predict_tag_mle(token, model_parameters)
 
 
-def _predict_tag_logreg(token, model, tag_encoder):
+def _predict_tag_logreg(token, model: sklearn.linear_model.LogisticRegression, tag_encoder):
     """Predict tag according to logistic regression on word embedding.
 
     Args:
@@ -168,6 +171,37 @@ def train_my_model(data):
     # Be sure to describe and justify all decisions in your report.
     #
     ##########################################################################
+    train_X = [[token.vector, token.tag_, token.dep_ ]for
+               sample in data for
+               token in sample['annotated_text']]
+    train_y = [token._.bio_slot_label for
+               sample in data for
+               token in sample['annotated_text']]
+    
+    # One-hot encode categories
+    onehot = sklearn.preprocessing.OneHotEncoder(sparse_output=False, handle_unknown='ignore')
+    vectors = [row[0] for row in train_X]
+    categories = [[row[1], row[2]] for row in train_X]
+    cateogries_encoded = onehot.fit_transform(categories)
+    train_X_encoded = [list(vector) + list(cats) for vector, cats in zip(vectors, cateogries_encoded)]
+    
+    tag_encoder = sklearn.preprocessing.LabelEncoder()
+    train_y_encoded = tag_encoder.fit_transform(train_y)
+
+    model = sklearn.linear_model.LogisticRegression(multi_class='multinomial',
+                                                    solver='newton-cg' \
+                                                   ).fit(train_X_encoded,
+                                                         train_y_encoded)
+    
+    print(f'> Finished training logistic regression on {len(train_X)} tokens')
+    return lambda token: _predict_my_model([list(token.vector) + list(onehot.transform(np.array([token.tag_, token.dep_]).reshape((1,-1))).ravel())], model, tag_encoder)
+
+def _predict_my_model(token, model, tag_encoder):
+    log_probs = model.predict_log_proba(token)[0]
+    distribution = list(zip(tag_encoder.classes_, log_probs))
+    sorted_distribution = \
+        sorted(distribution, key=lambda tag_logprob_pair: -tag_logprob_pair[1])
+    return sorted_distribution
 
 
 def predict_independent_tags(tag_predictor, data):
