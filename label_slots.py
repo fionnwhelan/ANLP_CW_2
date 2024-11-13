@@ -171,7 +171,7 @@ def train_my_model(data):
     # Be sure to describe and justify all decisions in your report.
     #
     ##########################################################################
-    train_X = [[token.vector, token.tag_, token.dep_ ]for
+    train_X = [get_relevant_data(token) for
                sample in data for
                token in sample['annotated_text']]
     train_y = [token._.bio_slot_label for
@@ -179,22 +179,27 @@ def train_my_model(data):
                token in sample['annotated_text']]
     
     # One-hot encode categories
-    onehot = sklearn.preprocessing.OneHotEncoder(sparse_output=False, handle_unknown='ignore')
-    vectors = [row[0] for row in train_X]
-    categories = [[row[1], row[2]] for row in train_X]
-    cateogries_encoded = onehot.fit_transform(categories)
-    train_X_encoded = [list(vector) + list(cats) for vector, cats in zip(vectors, cateogries_encoded)]
-    
+    # onehot = sklearn.preprocessing.OneHotEncoder(sparse_output=False, handle_unknown='ignore')
+    # vectors = [row[0] for row in train_X]
+    # categories = [[row[1]] for row in train_X]
+    # cateogries_encoded = onehot.fit_transform(categories)
+    # train_X_encoded = [list(vector) + list(cats) for vector, cats in zip(vectors, cateogries_encoded)]
+
     tag_encoder = sklearn.preprocessing.LabelEncoder()
     train_y_encoded = tag_encoder.fit_transform(train_y)
 
     model = sklearn.linear_model.LogisticRegression(multi_class='multinomial',
                                                     solver='newton-cg' \
-                                                   ).fit(train_X_encoded,
+                                                   ).fit(train_X,
                                                          train_y_encoded)
     
     print(f'> Finished training logistic regression on {len(train_X)} tokens')
-    return lambda token: _predict_my_model([list(token.vector) + list(onehot.transform(np.array([token.tag_, token.dep_]).reshape((1,-1))).ravel())], model, tag_encoder)
+    # return lambda token: _predict_my_model([list(token.vector) + list(onehot.transform(np.array([token.tag_, token.dep_]).reshape((1,-1))).ravel())], model, tag_encoder)
+    return lambda token: _predict_my_model(get_relevant_data(token).reshape(1,-1), model, tag_encoder)
+
+def get_relevant_data(token):
+    return np.concatenate((token.vector, token.head.vector))
+
 
 def _predict_my_model(token, model, tag_encoder):
     log_probs = model.predict_log_proba(token)[0]
